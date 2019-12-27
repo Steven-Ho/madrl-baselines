@@ -1,0 +1,4 @@
+runs
+.vscode
+__pycache__
+models

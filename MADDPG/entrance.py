@@ -5,6 +5,7 @@ import numpy as np
 import torch
 import os
 import itertools
+from copy import deepcopy
 from tensorboardX import SummaryWriter
 from buffer import ReplayMemory
 from train import AgentTrainer
@@ -25,6 +26,7 @@ parser.add_argument('--batch_size', type=int, default=128, help='batch size (def
 parser.add_argument('--hidden_dim', type=int, default=256, help='network hidden size (default: 256)')
 parser.add_argument('--start_steps', type=int, default=10000, help='steps before training begins')
 parser.add_argument('--target_update_interval', type=int, default=1, help='tagert network update interval')
+parser.add_argument('--updates_per_step', type=int, default=1, help='network update frequency')
 parser.add_argument('--replay_size', type=int, default=1000000, help='size of replay buffer')
 parser.add_argument('--cuda', action='store_true', help='run on GPU (default: False)')
 args = parser.parse_args()
@@ -66,9 +68,38 @@ for i_episode in itertools.count(1):
         action_list = [agent.act(obs) for agent, obs in zip(trainers, obs_list)]
 
         # interact with the environment
-        new_obs_list, reward_list, done_list, _ = env.step(action_list)
+        new_obs_list, reward_list, done_list, _ = env.step(deepcopy(action_list))
         total_numsteps += 1
         step_within_episode += 1
-        done = all(done)
+        done = all(done_list)
         terminated = (step_within_episode >= args.max_episode_len)
         done = done or terminated
+
+        # replay memory filling
+        memory.push((obs_list, action_list, reward_list, new_obs_list, done_list))
+        obs_list = new_obs_list
+
+        episode_reward += sum(reward_list)
+        for i in range(len(episode_reward_per_agent)):
+            episode_reward_per_agent[i] += reward_list[i]
+
+        if len(memory) > args.batch_size:
+            for _ in range(args.updates_per_step):
+                critic_losses = []
+                policy_losses = []
+                for i in range(env.n):
+                    critic_loss, policy_loss = trainers[i].update_parameters(memory, args.batch_size, updates)
+
+                    critic_losses.append(critic_loss)
+                    policy_losses.append(policy_loss)
+
+                    writer.add_scalar('loss/critic_{}'.format(i), critic_loss, updates)
+                    writer.add_scalar('loss/policy_{}'.format(i), policy_loss, updates)
+                    updates += 1
+
+    # logging episode stats
+    for i in range(env.n):
+        writer.add_scalar('reward/agent_{}'.format(i), episode_reward_per_agent[i], i_episode)
+    writer.add_scalar('reward/total', episode_reward, i_episode)
+    print("Episode: {}, total steps: {}, total episodes: {}, reward: {}".format(i_episode, total_numsteps,
+        step_within_episode, episode_reward))

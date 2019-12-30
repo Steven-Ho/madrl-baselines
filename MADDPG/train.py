@@ -43,7 +43,7 @@ class AgentTrainer(object):
 
     def update_parameters(self, memory, batch_size, updates):
         # Sample a batch
-        obs_batch, action_batch, reward_batch, next_obs_batch = memory.sample(batch_size=batch_size)
+        obs_batch, action_batch, reward_batch, next_obs_batch, _ = memory.sample(batch_size=batch_size)
         # Leave the correspondent data
         obs_batch = obs_batch[:,self.index]
         action_batch = action_batch[:,self.index]
@@ -78,3 +78,5 @@ class AgentTrainer(object):
         if updates % self.target_update_interval == 0:
             soft_update(self.critic_target, self.critic, self.tau)
             soft_update(self.policy_target, self.policy, self.tau)
+
+        return q_loss, policy_loss

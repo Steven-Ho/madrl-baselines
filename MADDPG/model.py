@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.distributions import Normal
+from torch.distributions import Normal, Categorical
 
 LOG_SIG_MAX = 2
 LOG_SIG_MIN = -20
@@ -33,6 +33,28 @@ class MLP(nn.Module):
             x = F.softmax(x)
 
         return x
+
+# class CategoricalPolicy(nn.Module):
+#     def __init__(self, num_inputs, action_dims, hidden_dim):
+#         super(CategoricalPolicy, self).__init__()
+
+#         self.l1 = nn.Linear(num_inputs, hidden_dim)
+#         self.l2 = nn.Linear(hidden_dim, hidden_dim)
+#         self.logits = nn.Linear(hidden_dim, action_dims)
+
+#         self.apply(weights_init)
+
+#     def forward(self, state):
+#         x = F.relu(self.l1(state))
+#         x = F.relu(self.l2(x))
+#         logits = self.logits(x)
+#         prob = F.softmax(logits)
+
+#         return logits, prob
+
+#     def sample(self, state):
+#         logits, prob = self.forward(state)
+
 
 class GaussianPolicy(nn.Module):
     def __init__(self, num_inputs, num_actions, hidden_dim, action_space=None):

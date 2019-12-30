@@ -4,10 +4,17 @@ import datetime
 import numpy as np 
 import torch
 import os
+import itertools
 from tensorboardX import SummaryWriter
+from buffer import ReplayMemory
+from train import AgentTrainer
+from multiagent.environment import MultiAgentEnv
+import multiagent.scenarios as scenarios
 
 parser = argparse.ArgumentParser(description='PyTorch MADDPG Args')
-parser.add_argument('--scenario', type=str, default='simple', help='name of the scenario script')
+parser.add_argument('--scenario', type=str, default='simple_spread', help='name of the scenario script')
+parser.add_argument('--num_episodes', type=int, default=60000, help='number of episodes for training')
+parser.add_argument('--max_episode_len', type=int, default=50, help='maximum episode length')
 parser.add_argument('--policy_lr', type=float, default=0.0003, help='learning rate for policies')
 parser.add_argument('--critic_lr', type=float, default=0.0003, help='learning rate for critics')
 parser.add_argument('--alpha', type=float, default=0.0, help='policy entropy term coefficient')
@@ -26,3 +33,42 @@ np.random.seed(args.seed)
 torch.manual_seed(args.seed)
 
 # TensorboardX
+logdir = 'runs/{}_MADDPG_{}'.format(datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"), args.scenario)
+writer = SummaryWriter(logdir=logdir)
+
+memory = ReplayMemory(args.replay_size)
+
+# Load environment
+scenario = scenarios.load(args.scenario + '.py').Scenario()
+world = scenario.make_world()
+env = MultiAgentEnv(world, scenario.reset_world, scenario.reward, scenario.observation)
+
+obs_shape_list = [env.observation_space[i].shape[0] for i in range(env.n)]
+action_shape_list = [env.action_space[i].shape[0] for i in range(env.n)]
+trainers = []
+for i in range(env.n):
+    trainers.append(AgentTrainer(env.n, i, obs_shape_list, action_shape_list, args))
+
+total_numsteps = 0
+updates = 0
+t_start = time.time()
+
+for i_episode in itertools.count(1):
+    episode_reward = 0.0 # sum of all agents
+    episode_reward_per_agent = [0.0 for _ in range(env.n)] # reward list
+    step_within_episode = 0
+
+    obs_list = env.reset()
+    done = False
+
+    while not done:
+        # TODO: substitute the actions with random ones when starts up
+        action_list = [agent.act(obs) for agent, obs in zip(trainers, obs_list)]
+
+        # interact with the environment
+        new_obs_list, reward_list, done_list, _ = env.step(action_list)
+        total_numsteps += 1
+        step_within_episode += 1
+        done = all(done)
+        terminated = (step_within_episode >= args.max_episode_len)
+        done = done or terminated

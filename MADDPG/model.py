@@ -77,7 +77,8 @@ class GaussianPolicy(nn.Module):
             self.action_bias = torch.FloatTensor((action_space.high + action_space.low)/2.)
 
     def forward(self, state):
-        x = F.relu(self.l1(state))
+        x = self.l1(state)
+        x = F.relu(x)
         x = F.relu(self.l2(x))
         mean = self.mean(x)
         log_std = self.log_std(x)

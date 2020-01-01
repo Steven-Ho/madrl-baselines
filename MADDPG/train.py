@@ -41,30 +41,44 @@ class AgentTrainer(object):
             action, _, _ = self.policy_target.sample(obs)
         return action.detach().cpu().numpy()[0]
 
-    def update_parameters(self, memory, batch_size, updates):
+    def update_parameters(self, samples, batch_size, updates):
         # Sample a batch
-        obs_batch, action_batch, reward_batch, next_obs_batch, _ = memory.sample(batch_size=batch_size)
+        obs_batch, action_batch, reward_batch, next_obs_batch, next_action_batch = samples
         # Leave the correspondent data
-        obs_batch = obs_batch[:,self.index]
-        action_batch = action_batch[:,self.index]
-        reward_batch = reward_batch[:,self.index]
-        next_obs_batch = next_obs_batch[:,self.index]
-        
+        obs_batch_i = obs_batch[:,self.index]
+        action_batch_i = action_batch[:,self.index]
+        reward_batch_i = reward_batch[:,self.index]
+        next_obs_batch_i = next_obs_batch[:,self.index]
+        # Reshape
+        obs_batch = np.reshape(obs_batch, (batch_size, -1))
+        action_batch = np.reshape(action_batch, (batch_size, -1))
+        next_obs_batch = np.reshape(next_obs_batch, (batch_size, -1))
+        # Move to the device designated
         obs_batch = torch.FloatTensor(obs_batch).to(self.device)
         action_batch = torch.FloatTensor(action_batch).to(self.device)
-        reward_batch = torch.FloatTensor(reward_batch).to(self.device)
         next_obs_batch = torch.FloatTensor(next_obs_batch).to(self.device)
+        next_actions = torch.FloatTensor(next_action_batch).to(self.device)
+        all_a = torch.FloatTensor(next_action_batch).to(self.device)
+        obs_batch_i = torch.FloatTensor(obs_batch_i).to(self.device)
+        action_batch_i = torch.FloatTensor(action_batch_i).to(self.device)
+        reward_batch_i = torch.FloatTensor(reward_batch_i).to(self.device)
+        reward_batch_i = reward_batch_i.unsqueeze(-1)
+        next_obs_batch_i = torch.FloatTensor(next_obs_batch_i).to(self.device)
 
         with torch.no_grad():
-            next_action, next_log_p, _ = self.policy_target.sample(next_obs_batch)
-            next_q = self.critic_target(next_obs_batch, next_action) - self.alpha * next_log_p
-            td_q = reward_batch + self.gamma * next_q
+            next_action, next_log_p, _ = self.policy_target.sample(next_obs_batch_i)
+            next_actions[:,self.index] = next_action
+            next_actions = torch.reshape(next_actions, (batch_size, -1))
+            next_q = self.critic_target(next_obs_batch, next_actions) - self.alpha * next_log_p
+            td_q = reward_batch_i + self.gamma * next_q
 
         q = self.critic(obs_batch, action_batch)
         q_loss = F.mse_loss(q, td_q)
 
-        a, log_p, _ = self.policy.sample(obs_batch)
-        q_p = self.critic(obs_batch, a)
+        a, log_p, _ = self.policy.sample(obs_batch_i)
+        all_a[:,self.index] = a
+        all_a = torch.reshape(all_a, (batch_size, -1))
+        q_p = self.critic(obs_batch, all_a)
         policy_loss = (self.alpha * log_p - q_p).mean()
 
         self.critic_optim.zero_grad()

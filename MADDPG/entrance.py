@@ -22,7 +22,7 @@ parser.add_argument('--alpha', type=float, default=0.0, help='policy entropy ter
 parser.add_argument('--tau', type=float, default=0.05, help='target network smoothing coefficient')
 parser.add_argument('--gamma', type=float, default=0.99, help='discount factor (default: 0.99)')
 parser.add_argument('--seed', type=int, default=123, help='random seed (default: 123)')
-parser.add_argument('--batch_size', type=int, default=4, help='batch size (default: 128)')
+parser.add_argument('--batch_size', type=int, default=128, help='batch size (default: 128)')
 parser.add_argument('--hidden_dim', type=int, default=256, help='network hidden size (default: 256)')
 parser.add_argument('--start_steps', type=int, default=10000, help='steps before training begins')
 parser.add_argument('--target_update_interval', type=int, default=1, help='tagert network update interval')
@@ -87,8 +87,13 @@ for i_episode in itertools.count(1):
             for _ in range(args.updates_per_step):
                 critic_losses = []
                 policy_losses = []
+                obs_batch, action_batch, reward_batch, next_obs_batch, _ = memory.sample(batch_size=args.batch_size)
+                # Generate actions for sampled 'next_obs'
+                next_action_list = [trainers[i].act(next_obs_batch[:,i]) for i in range(env.n)]
+                next_action_batch = np.stack(next_action_list, axis=1)
                 for i in range(env.n):
-                    critic_loss, policy_loss = trainers[i].update_parameters(memory, args.batch_size, updates)
+                    critic_loss, policy_loss = trainers[i].update_parameters((obs_batch, action_batch, reward_batch,
+                        next_obs_batch, next_action_batch), args.batch_size, updates)
 
                     critic_losses.append(critic_loss)
                     policy_losses.append(policy_loss)
@@ -102,4 +107,4 @@ for i_episode in itertools.count(1):
         writer.add_scalar('reward/agent_{}'.format(i), episode_reward_per_agent[i], i_episode)
     writer.add_scalar('reward/total', episode_reward, i_episode)
     print("Episode: {}, total steps: {}, total episodes: {}, reward: {}".format(i_episode, total_numsteps,
-        step_within_episode, episode_reward))
+        step_within_episode, round(episode_reward, 2)))

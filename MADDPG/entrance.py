@@ -29,6 +29,7 @@ parser.add_argument('--target_update_interval', type=int, default=1, help='tager
 parser.add_argument('--updates_per_step', type=int, default=1, help='network update frequency')
 parser.add_argument('--replay_size', type=int, default=1000000, help='size of replay buffer')
 parser.add_argument('--cuda', action='store_false', help='run on GPU (default: False)')
+parser.add_argument('--render', action='store_true', help='render or not')
 args = parser.parse_args()
 
 np.random.seed(args.seed)
@@ -43,7 +44,7 @@ memory = ReplayMemory(args.replay_size)
 # Load environment
 scenario = scenarios.load(args.scenario + '.py').Scenario()
 world = scenario.make_world()
-env = MultiAgentEnv(world, scenario.reset_world, scenario.reward, scenario.observation)
+env = MultiAgentEnv(world, scenario.reset_world, scenario.reward, scenario.observation, discrete_action_space=False)
 
 obs_shape_list = [env.observation_space[i].shape[0] for i in range(env.n)]
 action_shape_list = [env.action_space[i].shape[0] for i in range(env.n)]
@@ -69,6 +70,8 @@ for i_episode in itertools.count(1):
 
         # interact with the environment
         new_obs_list, reward_list, done_list, _ = env.step(deepcopy(action_list))
+        if args.render:
+            env.render()
         total_numsteps += 1
         step_within_episode += 1
         done = all(done_list)

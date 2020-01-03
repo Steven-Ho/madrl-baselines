@@ -22,7 +22,7 @@ parser.add_argument('--alpha', type=float, default=0.0, help='policy entropy ter
 parser.add_argument('--tau', type=float, default=0.05, help='target network smoothing coefficient')
 parser.add_argument('--gamma', type=float, default=0.99, help='discount factor (default: 0.99)')
 parser.add_argument('--seed', type=int, default=123, help='random seed (default: 123)')
-parser.add_argument('--batch_size', type=int, default=128, help='batch size (default: 128)')
+parser.add_argument('--batch_size', type=int, default=128, help='batch size (default: 128)') # cannot be 1
 parser.add_argument('--hidden_dim', type=int, default=256, help='network hidden size (default: 256)')
 parser.add_argument('--start_steps', type=int, default=10000, help='steps before training begins')
 parser.add_argument('--target_update_interval', type=int, default=1, help='tagert network update interval')
@@ -65,7 +65,7 @@ for i_episode in itertools.count(1):
 
     while not done:
         # TODO: substitute the actions with random ones when starts up
-        action_list = [agent.act(obs) for agent, obs in zip(trainers, obs_list)]
+        action_list = [agent.act(np.expand_dims(obs, axis=0)) for agent, obs in zip(trainers, obs_list)]
 
         # interact with the environment
         new_obs_list, reward_list, done_list, _ = env.step(deepcopy(action_list))

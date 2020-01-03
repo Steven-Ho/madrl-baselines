@@ -34,12 +34,13 @@ class AgentTrainer(object):
         hard_update(self.policy_target, self.policy)
 
     def act(self, obs, eval=False):
-        obs = torch.FloatTensor(obs).to(self.device).unsqueeze(0)
+        obs = torch.FloatTensor(obs).to(self.device)
         if eval:
             _, _, action = self.policy_target.sample(obs)
         else:
             action, _, _ = self.policy_target.sample(obs)
-        return action.detach().cpu().numpy()[0]
+        
+        return action.squeeze().detach().cpu().numpy()
 
     def update_parameters(self, samples, batch_size, updates):
         # Sample a batch

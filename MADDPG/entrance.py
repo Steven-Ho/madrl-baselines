@@ -15,15 +15,15 @@ import multiagent.scenarios as scenarios
 parser = argparse.ArgumentParser(description='PyTorch MADDPG Args')
 parser.add_argument('--scenario', type=str, default='simple_spread', help='name of the scenario script')
 parser.add_argument('--num_episodes', type=int, default=60000, help='number of episodes for training')
-parser.add_argument('--max_episode_len', type=int, default=50, help='maximum episode length')
-parser.add_argument('--policy_lr', type=float, default=0.0003, help='learning rate for policies')
-parser.add_argument('--critic_lr', type=float, default=0.0003, help='learning rate for critics')
+parser.add_argument('--max_episode_len', type=int, default=25, help='maximum episode length')
+parser.add_argument('--policy_lr', type=float, default=0.01, help='learning rate for policies')
+parser.add_argument('--critic_lr', type=float, default=0.01, help='learning rate for critics')
 parser.add_argument('--alpha', type=float, default=0.0, help='policy entropy term coefficient')
 parser.add_argument('--tau', type=float, default=0.05, help='target network smoothing coefficient')
-parser.add_argument('--gamma', type=float, default=0.99, help='discount factor (default: 0.99)')
+parser.add_argument('--gamma', type=float, default=0.95, help='discount factor (default: 0.99)')
 parser.add_argument('--seed', type=int, default=123, help='random seed (default: 123)')
-parser.add_argument('--batch_size', type=int, default=128, help='batch size (default: 128)') # cannot be 1
-parser.add_argument('--hidden_dim', type=int, default=256, help='network hidden size (default: 256)')
+parser.add_argument('--batch_size', type=int, default=1024, help='batch size (default: 128)') # cannot be 1
+parser.add_argument('--hidden_dim', type=int, default=64, help='network hidden size (default: 256)')
 parser.add_argument('--start_steps', type=int, default=10000, help='steps before training begins')
 parser.add_argument('--target_update_interval', type=int, default=1, help='tagert network update interval')
 parser.add_argument('--updates_per_step', type=int, default=1, help='network update frequency')
@@ -111,3 +111,11 @@ for i_episode in itertools.count(1):
     writer.add_scalar('reward/total', episode_reward, i_episode)
     print("Episode: {}, total steps: {}, total episodes: {}, reward: {}".format(i_episode, total_numsteps,
         step_within_episode, round(episode_reward, 2)))
+
+    if i_episode > args.num_episodes:
+        break
+
+for i in range(env.n):
+    trainers[i].save_model(args.scenario)
+
+env.close()

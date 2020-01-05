@@ -95,3 +95,34 @@ class AgentTrainer(object):
             soft_update(self.policy_target, self.policy, self.tau)
 
         return q_loss, policy_loss
+
+    # Save model parameters
+    def save_model(self, env_name, suffix="", actor_path=None, critic_path=None):
+        if not os.path.exists('models/'):
+            os.makedirs('models/')
+
+        if actor_path is None:
+            actor_path = "models/maddpg_actor_{}_{}_{}".format(env_name, suffix, self.index)
+        if critic_path is None:
+            critic_path = "models/maddpg_critic_{}_{}_{}".format(env_name, suffix, self.index)
+
+        print('Saving models to {} and {}'.format(actor_path, critic_path))
+        torch.save(self.policy.state_dict(), actor_path)
+        torch.save(self.critic.state_dict(), critic_path)        
+    
+    # Load model parameters
+    def load_model(self, actor_path=None, critic_path=None, env_name=None, suffix=""):
+        print('Loading models from {} and {}'.format(actor_path, critic_path))
+        if actor_path is not None:
+            self.policy.load_state_dict(torch.load(actor_path))
+        elif env_name is not None:
+            actor_path = "models/maddpg_actor_{}_{}_{}".format(env_name, suffix, self.index)
+            self.policy.load_state_dict(torch.load(actor_path))
+        if critic_path is not None:
+            self.critic.load_state_dict(torch.load(critic_path))
+        elif env_name is not None:
+            critic_path = "models/maddpg_critic_{}_{}_{}".format(env_name, suffix,self.index)
+            self.critic.load_state_dict(torch.load(critic_path))
+
+        hard_update(self.critic_target, self.critic)
+        hard_update(self.policy_target, self.policy)

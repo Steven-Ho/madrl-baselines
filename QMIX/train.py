@@ -20,25 +20,23 @@ class AgentsTrainer(object):
         self.gamma = args.gamma
         self.device = torch.device("cuda" if args.cuda else "cpu")
 
-        self.critics = []
-        self.critics_target = []
-        self.critic_optims = []
-        for i in range(num_agents):
-            self.critics.append(RNNQNetwork(obs_shape_list[i], action_shape_list[i], args.hidden_dim).to(device=self.device))
-            self.critics_target.append(RNNQNetwork(obs_shape_list[i], action_shape_list[i], args.hidden_dim).to(device=self.device))
-            self.critic_optims.append(Adam(self.critics[i].parameters(), lr=args.critic_lr))
-            hard_update(self.critics_target[i], self.critics[i])
+        # Suppose agents are homogeneous
+        # Use critics and actors with shared parameters
+        # Therefore agent id (onehot vector) is needed
+        self.critics = RNNQNetwork(num_agents + obs_shape_list[0], action_shape_list[0], args.hidden_dim).to(device=self.device)
+        self.critics_target = RNNQNetwork(num_agents + obs_shape_list[0], action_shape_list[0], args.hidden_dim).to(device=self.device)
+        self.critics_optim = Adam(self.critics.parameters(), lr=args.critic_lr)
+        hard_update(self.critics_target, self.critics)
 
-        self.actors = []
-        self.actors_target = []
-        self.actor_optims = []
-        for i in range(num_agents):
-            self.actors.append(RNNGaussianPolicy(obs_shape_list[i], action_shape_list[i], args.hidden_dim).to(device=self.device))
-            self.actors_target.append(RNNGaussianPolicy(obs_shape_list[i], action_shape_list[i], args.hidden_dim).to(device=self.device))
-            self.actor_optims.append(Adam(self.actors[i].parameters(), lr=args.policy_lr))
-            hard_update(self.actors_target[i], self.actors[i])
+        self.actors = RNNGaussianPolicy(num_agents + obs_shape_list[0], action_shape_list[0], args.hidden_dim).to(device=self.device)
+        self.actors_target = RNNGaussianPolicy(num_agents + obs_shape_list[0], action_shape_list[0], args.hidden_dim).to(device=self.device)
+        self.actors_optim = Adam(self.actors.parameters(), lr=args.policy_lr)
+        hard_update(self.actors_target, self.actors)
 
         self.qmix_net = QMIXNetwork(num_agents, args.hidden_dim, sum(obs_shape_list)).to(device=self.device)
+        self.qmix_net_target = QMIXNetwork(num_agents, args.hidden_dim, sum(obs_shape_list)).to(device=self.device)
+        self.qmix_net_optim = Adam(self.qmix_net, lr=args.critic_lr)
+        hard_update(self.qmix_net_target, self.qmix_net)
 
     def act(self, obs_list, eval=False):
         actions = []
@@ -52,9 +50,14 @@ class AgentsTrainer(object):
 
         return actions
     
+    def make_input(self, obs_list):
+        
+
     def reset(self):
         for i in range(self.na):
             self.actors_target[i].reset()
             self.actors[i].reset()
             self.critics_target[i].reset()
             self.critics[i].reset()
+
+    def update_parameters(self, samples, batch_size, updates):

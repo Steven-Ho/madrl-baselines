@@ -2,22 +2,53 @@ import random
 import numpy as np
 
 class ReplayMemory:
-    def __init__(self, capacity, max_episode_len):
+    def __init__(self, capacity, max_episode_len, num_agents, obs_shape, action_shape):
         self.capacity = capacity
-        self.buffer = []
-        self.position = 0
+        self.length = 0
+        self.episode = 0
+        self.t = 0
         self.max_episode_len = max_episode_len
+        self.num_agents = num_agents
+        self.obs_shape = obs_shape
+        self.action_shape = action_shape
+        self.buffer = dict()
+        self.buffer['obs'] = np.zeros(capacity, max_episode_len, num_agents, obs_shape)
+        self.buffer['actions'] = np.zeros(capacity, max_episode_len, num_agents, action_shape)
+        self.buffer['reward'] = np.zeros(capacity, max_episode_len)
+        self.buffer['obs_next'] = np.zeros(capacity, max_episode_len, num_agents, obs_shape)
+        self.buffer['mask'] = np.zeros(capacity, max_episode_len)
 
-    # push once when an episode ends
-    def push(self, data_tuples):
-        if len(self.buffer) < self.capacity:
-            self.buffer.append(None)
-        self.buffer[self.position] = data_tuples
-        self.position = (self.position + 1) % self.capacity
+    # push once per step
+    def push(self, obs, actions, reward, obs_next):
+        if self.length < self.capacity:
+            self.length += 1
+        self.buffer['obs'][self.episode][self.t] = obs
+        self.buffer['actions'][self.episode][self.t] = actions
+        self.buffer['reward'][self.episode][self.t] = reward
+        self.buffer['obs_next'][self.episode][self.t] = obs_next
+        self.buffer['mask'][self.episode][self.t] = 1.
+        self.t += 1
+
+    def end_episode(self):
+        self.episode = (self.episode + 1) % self.capacity
+        self.t = 0
+        # clear previous data
+        self.buffer['obs'][self.episode] = np.zeros(self.max_episode_len, self.num_agents, self.obs_shape)
+        self.buffer['actions'][self.episode] = np.zeros(self.max_episode_len, self.num_agents, self.action_shape)
+        self.buffer['reward'][self.episode] = np.zeros(self.max_episode_len)
+        self.buffer['obs_next'][self.episode] = np.zeros(self.max_episode_len, self.num_agents, self.obs_shape)
+        self.buffer['mask'][self.episode] = np.zeros(self.max_episode_len)
 
     def sample(self, num_episodes):
-        batch = random.sample(self.buffer, num_episodes)
-        return batch
+        assert num_episodes <= self.length
+        batch_indices = np.random.choice(self.length, size=num_episodes, replace=False)
+        obs_batch = np.take(self.buffer['obs'], batch_indices, axis=0)
+        actions_batch = np.take(self.buffer['actions'], batch_indices, axis=0)
+        reward_batch = np.take(self.buffer['reward'], batch_indices, axis=0)
+        obs_next_batch = np.take(self.buffer['obs_next'], batch_indices, axis=0)
+        mask_batch = np.take(self.buffer['mask'], batch_indices, axis=0)
+
+        return obs_batch, actions_batch, reward_batch, obs_next_batch, mask_batch 
 
     def __len__(self):
-        return len(self.buffer)
+        return self.length

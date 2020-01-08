@@ -22,9 +22,6 @@ class RNNGaussianPolicy(nn.Module):
         self.mean = nn.Linear(hidden_dim, num_actions)
         self.log_std = nn.Linear(hidden_dim, num_actions)
 
-        # intermediate state, set to None at the beginning of an episode
-        self.h = None
-
         self.apply(weights_init)
 
         # action rescaling
@@ -35,28 +32,21 @@ class RNNGaussianPolicy(nn.Module):
             self.action_scale = torch.FloatTensor((action_space.high - action_space.low)/2.)
             self.action_bias = torch.FloatTensor((action_space.high + action_space.low)/2.)   
 
-    def forward(self, state):
+    def forward(self, state, h):
         x = F.relu(self.l1(state))
-        if self.h is None:
+        if h is None:
             h_out = self.rnn(x)
         else:
-            h_out = self.rnn(x, self.h)
-        self.h = h_out
+            h_out = self.rnn(x, h)
 
         mean = self.mean(h_out)
         log_std = self.log_std(h_out)
         log_std = torch.clamp(log_std, min=LOG_SIG_MIN, max=LOG_SIG_MAX)
 
-        return mean, log_std
+        return mean, log_std, h_out
 
-    def _get_hidden_state(self):
-        return self.h
-
-    def reset(self):
-        self.h = None
-
-    def sample(self, state):
-        mean, log_std = self.forward(state)
+    def sample(self, state, h):
+        mean, log_std, h_out = self.forward(state, h)
         std = log_std.exp()
         normal = Normal(mean, std)
         x = normal.rsample()
@@ -69,7 +59,7 @@ class RNNGaussianPolicy(nn.Module):
         log_p = log_p.sum(1, keepdim=True)
         mean = torch.tanh(mean) * self.action_scale + self.action_bias
 
-        return action, log_p, mean     
+        return action, log_p, mean, h_out     
 
 class RNNQNetwork(nn.Module):
     def __init__(self, num_inputs, num_actions, hidden_dim):
@@ -79,29 +69,19 @@ class RNNQNetwork(nn.Module):
         self.rnn = nn.GRUCell(hidden_dim, hidden_dim)
         self.l2 = nn.Linear(hidden_dim, 1)
 
-        # intermediate state, set to None at the beginning of an episode
-        self.h = None
-
         self.apply(weights_init)
 
-    def forward(self, states, actions):
+    def forward(self, states, actions, h):
         x = torch.cat([states, actions], 1)
 
         x = F.relu(self.l1(x))
-        if self.h is None:
+        if h is None:
             h_out = self.rnn(x)
         else:
-            h_out = self.rnn(x, self.h)
-        self.h = h_out
+            h_out = self.rnn(x, h)
         x = self.l2(h_out)
 
-        return x
-
-    def _get_hidden_state(self):
-        return self.h
-
-    def reset(self):
-        self.h = None
+        return x, h_out
 
 class QMIXNetwork(nn.Module):
     def __init__(self, num_agents, hidden_dim, total_obs_dim):

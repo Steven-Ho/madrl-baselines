@@ -78,12 +78,13 @@ for i_episode in itertools.count(1):
             env.render()
         total_numsteps += 1
         step_within_episode += 1
-        done = all(done_list)
+        all_done = all(done_list)
         terminated = (step_within_episode >= args.max_episode_len)
-        done = done or terminated
+        done = all_done or terminated
 
         # replay memory filling
-        memory.push(np.asarray(obs_list), np.asarray(action_list), reward_list[0], np.asarray(new_obs_list))
+        memory.push(np.asarray(obs_list), np.asarray(action_list), reward_list[0], np.asarray(new_obs_list),
+                    1. if (all_done and not terminated) else 0.)
         obs_list = new_obs_list
 
         episode_reward += sum(reward_list)
@@ -92,8 +93,8 @@ for i_episode in itertools.count(1):
 
         if len(memory) > args.batch_size:
             for _ in range(args.updates_per_step):
-                obs_batch, action_batch, reward_batch, next_obs_batch, mask_batch = memory.sample(args.batch_size)
-                sample_batch = (obs_batch, action_batch, reward_batch, next_obs_batch, mask_batch)
+                obs_batch, action_batch, reward_batch, next_obs_batch, mask_batch, done_batch = memory.sample(args.batch_size)
+                sample_batch = (obs_batch, action_batch, reward_batch, next_obs_batch, mask_batch, done_batch)
                 critic_loss, policy_loss = trainer.update_parameters(sample_batch, args.batch_size, updates)
                 updates += 1
 

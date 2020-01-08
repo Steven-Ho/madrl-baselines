@@ -103,7 +103,7 @@ class QMIXNetwork(nn.Module):
         w1 = w1.reshape(-1, self.num_agents, self.hidden_dim)
         b1 = b1.reshape(-1, 1, self.hidden_dim)
 
-        x = F.elu(torch.bmm(q_values, w1) + b1)
+        x = F.elu(torch.bmm(q_values.unsqueeze(1), w1) + b1)
 
         w2 = torch.abs(self.hyper_w2(total_obs))
         b2 = self.hyper_b2_l2(F.relu(self.hyper_b2_l1(total_obs)))
@@ -112,4 +112,4 @@ class QMIXNetwork(nn.Module):
 
         x = torch.bmm(x, w2) + b2
 
-        return x
+        return x.squeeze()

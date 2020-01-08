@@ -15,6 +15,7 @@ class AgentsTrainer(object):
     def __init__(self, num_agents, obs_shape, action_shape, args):
         self.na = num_agents
         self.obs_shape = obs_shape
+        self.enhanced_obs_shape = obs_shape + num_agents
         self.action_shape = action_shape
         self.args = args
 
@@ -30,18 +31,18 @@ class AgentsTrainer(object):
         # Suppose agents are homogeneous
         # Use critics and actors with shared parameters
         # Therefore agent id (onehot vector) is needed
-        self.critics = RNNQNetwork(num_agents + obs_shape, action_shape, args.hidden_dim).to(device=self.device)
-        self.critics_target = RNNQNetwork(num_agents + obs_shape, action_shape, args.hidden_dim).to(device=self.device)
+        self.critics = RNNQNetwork(self.enhanced_obs_shape, action_shape, args.hidden_dim).to(device=self.device)
+        self.critics_target = RNNQNetwork(self.enhanced_obs_shape, action_shape, args.hidden_dim).to(device=self.device)
         self.critics_optim = Adam(self.critics.parameters(), lr=args.critic_lr)
         hard_update(self.critics_target, self.critics)
 
-        self.actors = RNNGaussianPolicy(num_agents + obs_shape, action_shape, args.hidden_dim).to(device=self.device)
-        self.actors_target = RNNGaussianPolicy(num_agents + obs_shape, action_shape, args.hidden_dim).to(device=self.device)
+        self.actors = RNNGaussianPolicy(self.enhanced_obs_shape, action_shape, args.hidden_dim).to(device=self.device)
+        self.actors_target = RNNGaussianPolicy(self.enhanced_obs_shape, action_shape, args.hidden_dim).to(device=self.device)
         self.actors_optim = Adam(self.actors.parameters(), lr=args.policy_lr)
         hard_update(self.actors_target, self.actors)
 
-        self.qmix_net = QMIXNetwork(num_agents, args.hidden_dim, obs_shape * num_agents).to(device=self.device)
-        self.qmix_net_target = QMIXNetwork(num_agents, args.hidden_dim, obs_shape * num_agents).to(device=self.device)
+        self.qmix_net = QMIXNetwork(num_agents, args.hidden_dim, self.enhanced_obs_shape * num_agents).to(device=self.device)
+        self.qmix_net_target = QMIXNetwork(num_agents, args.hidden_dim, self.enhanced_obs_shape * num_agents).to(device=self.device)
         self.qmix_net_optim = Adam(self.qmix_net.parameters(), lr=args.critic_lr)
         hard_update(self.qmix_net_target, self.qmix_net)
 
@@ -49,27 +50,32 @@ class AgentsTrainer(object):
         obs = self.make_input(obs)
         obs = torch.FloatTensor(obs).to(device=self.device)
         if eval:
-            _, _, actions = self.actors_target.sample(obs, self.actor_h)
+            _, _, actions, self.actor_h = self.actors_target.sample(obs, self.actor_h)
         else:
-            actions, _, _ = self.actors_target.sample(obs, self.actor_h)
+            actions, _, _, self.actor_h = self.actors_target.sample(obs, self.actor_h)
 
         return actions.detach().cpu().numpy()
     
     def make_input(self, obs):
-        if len(obs.shape) == 3:
+        shape = list(obs.shape)
+        shape[-1] = self.enhanced_obs_shape
+        if len(shape) >= 3:
             obs = obs.reshape(-1, self.obs_shape)
         identity = np.eye(self.na)
-        num_episodes = int(obs.shape[0] / self.na)
-        identity = np.tile(identity, (num_episodes, 1))
+        n = int(obs.shape[0] / self.na) # number of entries in total
+        identity = np.tile(identity, (n, 1))
         enhanced_obs = np.concatenate((obs, identity), axis=1)
+        enhanced_obs = enhanced_obs.reshape(shape)
 
         return enhanced_obs
 
     def reset(self):
-        self.actor_h = torch.Tensor(num_agents, args.hidden_dim).to(device=self.device)
+        self.actor_h = torch.Tensor(self.na, self.args.hidden_dim).to(device=self.device)
 
     def update_parameters(self, samples, batch_size, updates):
         obs_batch, action_batch, reward_batch, obs_next_batch, mask_batch, done_batch = samples
+        obs_batch = self.make_input(obs_batch)
+        obs_next_batch = self.make_input(obs_next_batch)
 
         obs_batch = torch.FloatTensor(obs_batch).to(device=self.device)
         action_batch = torch.FloatTensor(action_batch).to(device=self.device)
@@ -80,31 +86,34 @@ class AgentsTrainer(object):
 
         max_episode_len = obs_batch.shape[1]
         
-        actors_h = torch.zeros(batch_size * self.na, args.hidden_dim).to(device=self.device)
-        critics_1_h = torch.zeros(batch_size * self.na, args.hidden_dim).to(device=self.device)
-        critics_2_h = torch.zeros(batch_size * self.na, args.hidden_dim).to(device=self.device)
-        actors_target_h = torch.zeros(batch_size * self.na, args.hidden_dim).to(device=self.device)
-        critics_target_h = torch.zeros(batch_size * self.na, args.hidden_dim).to(device=self.device)
+        actors_h = torch.zeros(batch_size * self.na, self.args.hidden_dim).to(device=self.device)
+        critics_1_h = torch.zeros(batch_size * self.na, self.args.hidden_dim).to(device=self.device)
+        critics_2_h = torch.zeros(batch_size * self.na, self.args.hidden_dim).to(device=self.device)
+        actors_target_h = torch.zeros(batch_size * self.na, self.args.hidden_dim).to(device=self.device)
+        critics_target_h = torch.zeros(batch_size * self.na, self.args.hidden_dim).to(device=self.device)
         for i in range(max_episode_len):
             # train in time order
-            obs_slice = obs_batch[:,i].squeeze().reshape(-1, self.obs_shape)
+            obs_slice = obs_batch[:,i].squeeze().reshape(-1, self.enhanced_obs_shape)
+            total_obs_slice = obs_batch[:,i].squeeze().reshape(-1, self.na * self.enhanced_obs_shape)
             action_slice = action_batch[:,i].squeeze().reshape(-1, self.action_shape)
             reward_slice = reward_batch[:,i].squeeze().reshape(-1)
-            obs_next_slice = obs_next_batch[:,i].squeeze().reshape(-1, self.obs_shape)
+            obs_next_slice = obs_next_batch[:,i].squeeze().reshape(-1, self.enhanced_obs_shape)
+            total_obs_next_slice = obs_next_batch[:,i].squeeze().reshape(-1, self.na * self.enhanced_obs_shape)
             mask_slice = mask_batch[:,i].squeeze().reshape(-1)
+            done_slice = done_batch[:,i].squeeze().reshape(-1)
 
             if mask_slice.sum().cpu().numpy() < EPS:
                 break
 
             with torch.no_grad():
                 action_next, log_p_next, _, actors_target_h = self.actors_target.sample(obs_next_slice, actors_target_h)
-                qs_next, critics_target_h = self.critics_target(obs_next_slice, action_next_slice, critics_target_h) - self.alpha * log_p_next
+                qs_next, critics_target_h = self.critics_target(obs_next_slice, action_next, critics_target_h)# - self.alpha * log_p_next
                 qs_next = qs_next.reshape(-1, self.na)
-                q_next = self.qmix_net_target(qs_next)
-                td_q = (reward_slice + self.gamma * (1. - done_batch) * q_next) * mask_slice
+                q_next = self.qmix_net_target(qs_next, total_obs_next_slice)
+                td_q = (reward_slice + self.gamma * (1. - done_slice) * q_next) * mask_slice
 
             qs, critics_1_h = self.critics(obs_slice, action_slice, critics_1_h)
-            q = self.qmix_net(qs.reshape(-1, self.na)) * mask_slice
+            q = self.qmix_net(qs.reshape(-1, self.na), total_obs_slice) * mask_slice
             q_loss = ((q - td_q)**2).sum() / mask_slice.sum()
 
             a, log_p, _, actors_h = self.actors.sample(obs_slice, actors_h)
@@ -127,4 +136,4 @@ class AgentsTrainer(object):
                 soft_update(self.actors_target, self.actors, self.tau)
                 soft_update(self.qmix_net_target, self.qmix_net, self.tau)
 
-    return q_loss, p_loss            
+        return q_loss, p_loss            

@@ -71,7 +71,7 @@ class RNNGaussianPolicy(nn.Module):
 
         return action, log_p, mean     
 
-class RNNQNetwork(n.Module):
+class RNNQNetwork(nn.Module):
     def __init__(self, num_inputs, num_actions, hidden_dim):
         super(RNNQNetwork, self).__init__()
 

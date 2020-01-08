@@ -35,19 +35,20 @@ class AgentsTrainer(object):
         self.actors_optim = Adam(self.actors.parameters(), lr=args.policy_lr)
         hard_update(self.actors_target, self.actors)
 
-        self.qmix_net = QMIXNetwork(num_agents, args.hidden_dim, sum(obs_shape_list)).to(device=self.device)
-        self.qmix_net_target = QMIXNetwork(num_agents, args.hidden_dim, sum(obs_shape_list)).to(device=self.device)
-        self.qmix_net_optim = Adam(self.qmix_net, lr=args.critic_lr)
+        self.qmix_net = QMIXNetwork(num_agents, args.hidden_dim, obs_shape * num_agents).to(device=self.device)
+        self.qmix_net_target = QMIXNetwork(num_agents, args.hidden_dim, obs_shape * num_agents).to(device=self.device)
+        self.qmix_net_optim = Adam(self.qmix_net.parameters(), lr=args.critic_lr)
         hard_update(self.qmix_net_target, self.qmix_net)
 
     def act(self, obs, eval=False):
+        obs = self.make_input(obs)
         obs = torch.FloatTensor(obs).to(device=self.device)
         if eval:
             _, _, actions = self.actors_target.sample(obs)
         else:
             actions, _, _ = self.actors_target.sample(obs)
 
-        return actions
+        return actions.detach().cpu().numpy()
     
     def make_input(self, obs):
         if len(obs.shape) == 3:
@@ -66,3 +67,4 @@ class AgentsTrainer(object):
         self.critics_target.reset()
 
     def update_parameters(self, samples, batch_size, updates):
+        pass

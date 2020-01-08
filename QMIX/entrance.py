@@ -39,8 +39,6 @@ torch.manual_seed(args.seed)
 logdir = 'runs/QMIX/{}_{}'.format(datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"), args.scenario)
 writer = SummaryWriter(logdir=logdir)
 
-memory = ReplayMemory(args.replay_size)
-
 # Load environment
 scenario = scenarios.load(args.scenario + '.py').Scenario()
 world = scenario.make_world()
@@ -55,6 +53,8 @@ action_shape = action_shape_list[0]
 for i in range(len(obs_shape_list)):
     assert obs_shape_list[i] == obs_shape
     assert action_shape_list[i] == action_shape
+
+memory = ReplayMemory(args.replay_size, args.max_episode_len, env.n, obs_shape, action_shape)
 
 trainer = AgentsTrainer(env.n, obs_shape, action_shape, args)
 total_numsteps = 0
@@ -90,14 +90,15 @@ for i_episode in itertools.count(1):
         for i in range(len(episode_reward_per_agent)):
             episode_reward_per_agent[i] += reward_list[i]
 
-        if len(memory) > 2 * args.batch_size:
+        if len(memory) > args.batch_size:
             for _ in range(args.updates_per_step):
-                obs_batch, action_batch, reward_batch, next_obs_batch, mask_batch = memory.sample(batch_size=args.batch_size)
+                obs_batch, action_batch, reward_batch, next_obs_batch, mask_batch = memory.sample(args.batch_size)
                 sample_batch = (obs_batch, action_batch, reward_batch, next_obs_batch, mask_batch)
                 critic_loss, policy_loss = trainer.update_parameters(sample_batch, args.batch_size, updates)
                 updates += 1
 
-    trainer.end_episode()
+    memory.end_episode()
+    trainer.reset()
 
     writer.add_scalar('reward/total', episode_reward, i_episode)
     print("Episode: {}, total steps: {}, total episodes: {}, reward: {}".format(i_episode, total_numsteps,

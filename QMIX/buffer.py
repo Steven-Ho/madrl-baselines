@@ -12,16 +12,14 @@ class ReplayMemory:
         self.obs_shape = obs_shape
         self.action_shape = action_shape
         self.buffer = dict()
-        self.buffer['obs'] = np.zeros(capacity, max_episode_len, num_agents, obs_shape)
-        self.buffer['actions'] = np.zeros(capacity, max_episode_len, num_agents, action_shape)
-        self.buffer['reward'] = np.zeros(capacity, max_episode_len)
-        self.buffer['obs_next'] = np.zeros(capacity, max_episode_len, num_agents, obs_shape)
-        self.buffer['mask'] = np.zeros(capacity, max_episode_len)
+        self.buffer['obs'] = np.zeros((capacity, max_episode_len, num_agents, obs_shape), dtype=np.float32)
+        self.buffer['actions'] = np.zeros((capacity, max_episode_len, num_agents, action_shape), dtype=np.float32)
+        self.buffer['reward'] = np.zeros((capacity, max_episode_len), dtype=np.float32)
+        self.buffer['obs_next'] = np.zeros((capacity, max_episode_len, num_agents, obs_shape), dtype=np.float32)
+        self.buffer['mask'] = np.zeros((capacity, max_episode_len), dtype=np.float32)
 
     # push once per step
     def push(self, obs, actions, reward, obs_next):
-        if self.length < self.capacity:
-            self.length += 1
         self.buffer['obs'][self.episode][self.t] = obs
         self.buffer['actions'][self.episode][self.t] = actions
         self.buffer['reward'][self.episode][self.t] = reward
@@ -30,14 +28,16 @@ class ReplayMemory:
         self.t += 1
 
     def end_episode(self):
+        if self.length < self.capacity:
+            self.length += 1
         self.episode = (self.episode + 1) % self.capacity
         self.t = 0
         # clear previous data
-        self.buffer['obs'][self.episode] = np.zeros(self.max_episode_len, self.num_agents, self.obs_shape)
-        self.buffer['actions'][self.episode] = np.zeros(self.max_episode_len, self.num_agents, self.action_shape)
-        self.buffer['reward'][self.episode] = np.zeros(self.max_episode_len)
-        self.buffer['obs_next'][self.episode] = np.zeros(self.max_episode_len, self.num_agents, self.obs_shape)
-        self.buffer['mask'][self.episode] = np.zeros(self.max_episode_len)
+        self.buffer['obs'][self.episode] = np.zeros((self.max_episode_len, self.num_agents, self.obs_shape), dtype=np.float32)
+        self.buffer['actions'][self.episode] = np.zeros((self.max_episode_len, self.num_agents, self.action_shape), dtype=np.float32)
+        self.buffer['reward'][self.episode] = np.zeros((self.max_episode_len,), dtype=np.float32)
+        self.buffer['obs_next'][self.episode] = np.zeros((self.max_episode_len, self.num_agents, self.obs_shape), dtype=np.float32)
+        self.buffer['mask'][self.episode] = np.zeros((self.max_episode_len,), dtype=np.float32)
 
     def sample(self, num_episodes):
         assert num_episodes <= self.length

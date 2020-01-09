@@ -74,8 +74,7 @@ for i_episode in itertools.count(1):
 
         # interact with the environment
         new_obs_list, reward_list, done_list, _ = env.step(deepcopy(action_list))
-        if reward_list[0] != reward_list[0]:
-            print("NaNs detected!")
+
         if args.render:
             env.render()
         total_numsteps += 1

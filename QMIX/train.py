@@ -70,7 +70,7 @@ class AgentsTrainer(object):
         return enhanced_obs
 
     def reset(self):
-        self.actor_h = torch.Tensor(self.na, self.args.hidden_dim).to(device=self.device)
+        self.actor_h = torch.zeros(self.na, self.args.hidden_dim).to(device=self.device)
 
     def update_parameters(self, samples, batch_size, updates):
         obs_batch, action_batch, reward_batch, obs_next_batch, mask_batch, done_batch = samples

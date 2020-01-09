@@ -118,17 +118,17 @@ class AgentsTrainer(object):
 
             a, log_p, _, actors_h = self.actors.sample(obs_slice, actors_h)
             qs_a, critics_2_h = self.critics(obs_slice, a, critics_2_h)
-            q_a = self.qmix_net(qs_a.reshape(-1, self.na)) * mask_slice
+            q_a = self.qmix_net(qs_a.reshape(-1, self.na), total_obs_slice) * mask_slice
             p_loss = (self.alpha * log_p - q_a).sum() / mask_slice.sum()
 
             self.critics_optim.zero_grad()
             self.qmix_net_optim.zero_grad()
-            q_loss.backward()
+            q_loss.backward(retain_graph=True)
             self.critics_optim.step()
             self.qmix_net_optim.step()
 
             self.actors_optim.zero_grad()
-            p_loss.backward()
+            p_loss.backward(retain_graph=True)
             self.actors_optim.step()
 
             if updates % self.target_update_interval == 0:

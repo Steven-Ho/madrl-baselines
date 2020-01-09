@@ -26,7 +26,7 @@ class AgentsTrainer(object):
         self.device = torch.device("cuda" if args.cuda else "cpu")
 
         # Hidden states used in policy rollouts
-        self.actor_h = torch.Tensor(num_agents, args.hidden_dim).to(device=self.device)
+        self.actor_h = torch.zeros(num_agents, args.hidden_dim).to(device=self.device)
 
         # Suppose agents are homogeneous
         # Use critics and actors with shared parameters
@@ -91,6 +91,9 @@ class AgentsTrainer(object):
         critics_2_h = torch.zeros(batch_size * self.na, self.args.hidden_dim).to(device=self.device)
         actors_target_h = torch.zeros(batch_size * self.na, self.args.hidden_dim).to(device=self.device)
         critics_target_h = torch.zeros(batch_size * self.na, self.args.hidden_dim).to(device=self.device)
+
+        cl = []
+        pl = []
         for i in range(max_episode_len):
             # train in time order
             obs_slice = obs_batch[:,i].squeeze().reshape(-1, self.enhanced_obs_shape)
@@ -119,7 +122,7 @@ class AgentsTrainer(object):
             a, log_p, _, actors_h = self.actors.sample(obs_slice, actors_h)
             qs_a, critics_2_h = self.critics(obs_slice, a, critics_2_h)
             q_a = self.qmix_net(qs_a.reshape(-1, self.na), total_obs_slice) * mask_slice
-            p_loss = (self.alpha * log_p - q_a).sum() / mask_slice.sum()
+            p_loss = - q_a.sum() / mask_slice.sum() # entropy term removed
 
             self.critics_optim.zero_grad()
             self.qmix_net_optim.zero_grad()
@@ -131,9 +134,11 @@ class AgentsTrainer(object):
             p_loss.backward(retain_graph=True)
             self.actors_optim.step()
 
+            cl.append(q_loss.detach().cpu().numpy())
+            pl.append(p_loss.detach().cpu().numpy())
             if updates % self.target_update_interval == 0:
                 soft_update(self.critics_target, self.critics, self.tau)
                 soft_update(self.actors_target, self.actors, self.tau)
                 soft_update(self.qmix_net_target, self.qmix_net, self.tau)
 
-        return q_loss, p_loss            
+        return cl, pl            

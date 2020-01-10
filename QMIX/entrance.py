@@ -16,13 +16,13 @@ parser = argparse.ArgumentParser(description='PyTorch QMIX Args')
 parser.add_argument('--scenario', type=str, default='simple_spread', help='name of the scenario script')
 parser.add_argument('--num_episodes', type=int, default=60000, help='number of episodes for training')
 parser.add_argument('--max_episode_len', type=int, default=25, help='maximum episode length')
-parser.add_argument('--policy_lr', type=float, default=0.0000, help='learning rate for policies')
-parser.add_argument('--critic_lr', type=float, default=0.001, help='learning rate for critics')
+parser.add_argument('--policy_lr', type=float, default=0.0001, help='learning rate for policies')
+parser.add_argument('--critic_lr', type=float, default=0.01, help='learning rate for critics')
 parser.add_argument('--alpha', type=float, default=0.0, help='policy entropy term coefficient')
 parser.add_argument('--tau', type=float, default=0.05, help='target network smoothing coefficient')
 parser.add_argument('--gamma', type=float, default=0.95, help='discount factor (default: 0.99)')
 parser.add_argument('--seed', type=int, default=123, help='random seed (default: 123)')
-parser.add_argument('--batch_size', type=int, default=32, help='batch size (default: 16)') # episodes
+parser.add_argument('--batch_size', type=int, default=256, help='batch size (default: 16)') # episodes
 parser.add_argument('--hidden_dim', type=int, default=64, help='network hidden size (default: 256)')
 parser.add_argument('--start_steps', type=int, default=10000, help='steps before training begins')
 parser.add_argument('--target_update_interval', type=int, default=1, help='tagert network update interval')
@@ -61,6 +61,8 @@ total_numsteps = 0
 updates = 0
 t_start = time.time()
 
+reward_bias = 30.
+train_policy = False
 for i_episode in itertools.count(1):
     episode_reward = 0.0 # sum of all agents
     episode_reward_per_agent = [0.0 for _ in range(env.n)] # reward list
@@ -86,7 +88,7 @@ for i_episode in itertools.count(1):
         done = all_done or terminated
 
         # replay memory filling
-        memory.push(np.asarray(obs_list), np.asarray(action_list), reward_list[0], np.asarray(new_obs_list),
+        memory.push(np.asarray(obs_list), np.asarray(action_list), reward_list[0] + reward_bias, np.asarray(new_obs_list),
                     1. if (all_done and not terminated) else 0.)
         # memory.push(np.asarray(obs_list), np.asarray(action_list), reward_list[0], np.asarray(new_obs_list),
         #              1. if done else 0.)
@@ -99,11 +101,13 @@ for i_episode in itertools.count(1):
     memory.end_episode()
     trainer.reset()
 
+    if i_episode > 1000:
+        train_policy = True
     if len(memory) > args.batch_size:
         for _ in range(args.updates_per_step):
             obs_batch, action_batch, reward_batch, next_obs_batch, mask_batch, done_batch = memory.sample(args.batch_size)
             sample_batch = (obs_batch, action_batch, reward_batch, next_obs_batch, mask_batch, done_batch)
-            critic_loss, policy_loss = trainer.update_parameters(sample_batch, args.batch_size, updates)
+            critic_loss, policy_loss = trainer.update_parameters(sample_batch, args.batch_size, updates, train_policy)
             cl_mean = np.mean(np.asarray(critic_loss))
             pl_mean = np.mean(np.asarray(policy_loss))
             updates += 1

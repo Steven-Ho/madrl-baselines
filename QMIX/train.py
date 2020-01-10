@@ -41,8 +41,8 @@ class AgentsTrainer(object):
         self.actors_optim = Adam(self.actors.parameters(), lr=args.policy_lr)
         hard_update(self.actors_target, self.actors)
 
-        self.qmix_net = QMIXNetwork(num_agents, args.hidden_dim, self.enhanced_obs_shape * num_agents).to(device=self.device)
-        self.qmix_net_target = QMIXNetwork(num_agents, args.hidden_dim, self.enhanced_obs_shape * num_agents).to(device=self.device)
+        self.qmix_net = QMIXNetwork(num_agents, 16, self.enhanced_obs_shape * num_agents).to(device=self.device)
+        self.qmix_net_target = QMIXNetwork(num_agents, 16, self.enhanced_obs_shape * num_agents).to(device=self.device)
         self.qmix_net_optim = Adam(self.qmix_net.parameters(), lr=args.critic_lr)
         hard_update(self.qmix_net_target, self.qmix_net)
 
@@ -72,7 +72,7 @@ class AgentsTrainer(object):
     def reset(self):
         self.actor_h = torch.zeros(self.na, self.args.hidden_dim).to(device=self.device)
 
-    def update_parameters(self, samples, batch_size, updates):
+    def update_parameters(self, samples, batch_size, updates, train_policy):
         obs_batch, action_batch, reward_batch, obs_next_batch, mask_batch, done_batch = samples
         obs_batch = self.make_input(obs_batch)
         obs_next_batch = self.make_input(obs_next_batch)
@@ -115,6 +115,7 @@ class AgentsTrainer(object):
                 q_next = self.qmix_net_target(qs_next, total_obs_next_slice)
                 td_q = (reward_slice + self.gamma * (1. - done_slice) * q_next) * mask_slice
 
+            temp_h = critics_1_h
             qs, critics_1_h = self.critics(obs_slice, action_slice, critics_1_h)
             q = self.qmix_net(qs.reshape(-1, self.na), total_obs_slice) * mask_slice
             q_loss = ((q - td_q)**2).sum() / mask_slice.sum()
@@ -130,9 +131,14 @@ class AgentsTrainer(object):
             self.critics_optim.step()
             self.qmix_net_optim.step()
 
-            self.actors_optim.zero_grad()
-            p_loss.backward(retain_graph=True)
-            self.actors_optim.step()
+            qs, _ = self.critics(obs_slice, action_slice, temp_h)
+            q = self.qmix_net(qs.reshape(-1, self.na), total_obs_slice) * mask_slice
+            q_loss_trained = ((q - td_q)**2).sum() / mask_slice.sum()            
+
+            if train_policy:
+                self.actors_optim.zero_grad()
+                p_loss.backward(retain_graph=True)
+                self.actors_optim.step()
 
             cl.append(q_loss.detach().cpu().numpy())
             pl.append(p_loss.detach().cpu().numpy())

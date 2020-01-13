@@ -30,6 +30,7 @@ parser.add_argument('--updates_per_step', type=int, default=1, help='network upd
 parser.add_argument('--replay_size', type=int, default=50000, help='maximum number of episodes of replay buffer')
 parser.add_argument('--cuda', action='store_false', help='run on GPU (default: False)')
 parser.add_argument('--render', action='store_true', help='render or not')
+parser.add_argument('--discrete_action', action='store_false', help='choose environment settings: discrete action space')
 args = parser.parse_args()
 
 np.random.seed(args.seed)
@@ -40,9 +41,10 @@ logdir = 'runs/QMIX/{}_{}'.format(datetime.datetime.now().strftime("%Y-%m-%d_%H-
 writer = SummaryWriter(logdir=logdir)
 
 # Load environment
+# when the action space is switched to discrete, QMIX act as Q-learning style, rather than AC structure
 scenario = scenarios.load(args.scenario + '.py').Scenario()
 world = scenario.make_world()
-env = MultiAgentEnv(world, scenario.reset_world, scenario.reward, scenario.observation, discrete_action_space=False)
+env = MultiAgentEnv(world, scenario.reset_world, scenario.reward, scenario.observation, discrete_action_space=True)
 
 obs_shape_list = [env.observation_space[i].shape[0] for i in range(env.n)]
 action_shape_list = [env.action_space[i].shape[0] for i in range(env.n)]

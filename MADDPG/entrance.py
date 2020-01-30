@@ -22,7 +22,7 @@ parser.add_argument('--alpha', type=float, default=0.0, help='policy entropy ter
 parser.add_argument('--tau', type=float, default=0.05, help='target network smoothing coefficient')
 parser.add_argument('--gamma', type=float, default=0.95, help='discount factor (default: 0.99)')
 parser.add_argument('--seed', type=int, default=123, help='random seed (default: 123)')
-parser.add_argument('--batch_size', type=int, default=1024, help='batch size (default: 128)') # cannot be 1
+parser.add_argument('--batch_size', type=int, default=1024, help='batch size (default: 128)')
 parser.add_argument('--hidden_dim', type=int, default=64, help='network hidden size (default: 256)')
 parser.add_argument('--start_steps', type=int, default=10000, help='steps before training begins')
 parser.add_argument('--target_update_interval', type=int, default=1, help='tagert network update interval')
@@ -51,6 +51,11 @@ action_shape_list = [env.action_space[i].shape[0] for i in range(env.n)]
 trainers = []
 for i in range(env.n):
     trainers.append(AgentTrainer(env.n, i, obs_shape_list, action_shape_list, args))
+
+if os.path.exists('models/') and os.listdir('models/'):
+    for t in trainers:
+        t.load_model(env_name=args.scenario)
+    print("Load models from files...")
 
 total_numsteps = 0
 updates = 0
@@ -115,7 +120,7 @@ for i_episode in itertools.count(1):
     if i_episode > args.num_episodes:
         break
 
-for i in range(env.n):
-    trainers[i].save_model(args.scenario)
+for t in trainers:
+    t.save_model(args.scenario)
 
 env.close()

@@ -114,11 +114,31 @@ for i_episode in itertools.count(1):
     for i in range(env.n):
         writer.add_scalar('reward/agent_{}'.format(i), episode_reward_per_agent[i], i_episode)
     writer.add_scalar('reward/total', episode_reward, i_episode)
-    print("Episode: {}, total steps: {}, total episodes: {}, reward: {}".format(i_episode, total_numsteps,
+    print("Episode: {}, total steps: {}, episode steps: {}, reward: {}".format(i_episode, total_numsteps,
         step_within_episode, round(episode_reward, 2)))
 
     if i_episode > args.num_episodes:
         break
+
+    # Test
+    if i_episode % 100 == 0:
+        episode_reward = 0.0
+        step_within_episode = 0
+        obs_list = env.reset()
+        done = False
+
+        while not done:
+            action_list = [agent.act(np.expand_dims(obs, axis=0)) for agent, obs in zip(trainers, obs_list)]
+
+            new_obs_list, reward_list, done_list, _ = env.step(deepcopy(action_list))
+            env.render()
+            step_within_episode += 1
+            done = all(done_list)
+            terminated = (step_within_episode >= args.max_episode_len)
+            done = done or terminated
+
+            obs_list = new_obs_list
+            episode_reward += sum(reward_list)
 
 for t in trainers:
     t.save_model(args.scenario)

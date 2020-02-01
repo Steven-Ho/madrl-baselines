@@ -48,9 +48,8 @@ env = MultiAgentEnv(world, scenario.reset_world, scenario.reward, scenario.obser
 
 obs_shape_list = [env.observation_space[i].shape[0] for i in range(env.n)]
 action_shape_list = [env.action_space[i].shape[0] for i in range(env.n)]
-trainers = []
-for i in range(env.n):
-    trainers.append(AgentTrainer(env.n, i, obs_shape_list, action_shape_list, args))
+
+trainer = AgentTrainer(env.n, obs_shape_list, action_shape_list, args)
 
 # if os.path.exists('models/') and os.listdir('models/'):
 #     for t in trainers:
@@ -71,7 +70,7 @@ for i_episode in itertools.count(1):
 
     while not done:
         # TODO: substitute the actions with random ones when starts up
-        action_list = [agent.act(np.expand_dims(obs, axis=0)) for agent, obs in zip(trainers, obs_list)]
+        action_list = [trainer.act(np.expand_dims(obs, axis=0)) for obs in obs_list]
 
         # interact with the environment
         new_obs_list, reward_list, done_list, _ = env.step(deepcopy(action_list))
@@ -97,11 +96,11 @@ for i_episode in itertools.count(1):
                 policy_losses = []
                 obs_batch, action_batch, reward_batch, next_obs_batch, _ = memory.sample(batch_size=args.batch_size)
                 # Generate actions for sampled 'next_obs'
-                next_action_list = [trainers[i].act(next_obs_batch[:,i]) for i in range(env.n)]
+                next_action_list = [trainer.act(next_obs_batch[:,i]) for i in range(env.n)]
                 next_action_batch = np.stack(next_action_list, axis=1)
                 for i in range(env.n):
-                    critic_loss, policy_loss = trainers[i].update_parameters((obs_batch, action_batch, reward_batch,
-                        next_obs_batch, next_action_batch), args.batch_size, updates)
+                    critic_loss, policy_loss = trainer.update_parameters((obs_batch, action_batch, reward_batch,
+                        next_obs_batch, next_action_batch), args.batch_size, i, updates)
 
                     critic_losses.append(critic_loss)
                     policy_losses.append(policy_loss)

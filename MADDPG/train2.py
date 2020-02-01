@@ -9,10 +9,11 @@ from utils import soft_update, hard_update
 from MADDPG.model import GaussianPolicy, QNetwork
 from MADDPG.buffer import ReplayMemory
 
+# This Trainer only contains one critic and one actor, the critic is trained by designated index
+# Assume all agent's obeservation and action spaces are identical
 class AgentTrainer(object):
-    def __init__(self, num_agents, agent_index, obs_shape_list, action_shape_list, args):
+    def __init__(self, num_agents, obs_shape_list, action_shape_list, args):
         self.na = num_agents
-        self.index = agent_index
         self.args = args
 
         self.target_update_interval = args.target_update_interval
@@ -21,8 +22,8 @@ class AgentTrainer(object):
         self.gamma = args.gamma
         self.device = torch.device("cuda" if args.cuda else "cpu")
 
-        num_inputs = reduce((lambda x,y: x+y), obs_shape_list)
-        num_actions = reduce((lambda x,y: x+y), action_shape_list)
+        num_inputs = sum(obs_shape_list) + num_agents # plus one-hot vector representation of agent index
+        num_actions = sum(action_shape_list)
 
         self.critic = QNetwork(num_inputs, num_actions, args.hidden_dim).to(device=self.device)
         self.critic_target = QNetwork(num_inputs, num_actions, args.hidden_dim).to(device=self.device)
@@ -43,14 +44,19 @@ class AgentTrainer(object):
         
         return action.squeeze().detach().cpu().numpy()
 
-    def update_parameters(self, samples, batch_size, updates):
+    def update_parameters(self, samples, batch_size, index, updates):
         # Sample a batch
         obs_batch, action_batch, reward_batch, next_obs_batch, next_action_batch = samples
         # Leave the correspondent data
-        obs_batch_i = obs_batch[:,self.index]
-        action_batch_i = action_batch[:,self.index]
-        reward_batch_i = reward_batch[:,self.index]
-        next_obs_batch_i = next_obs_batch[:,self.index]
+        obs_batch_i = obs_batch[:,index]
+        action_batch_i = action_batch[:,index]
+        reward_batch_i = reward_batch[:,index]
+        next_obs_batch_i = next_obs_batch[:,index]
+        # Add one-hot vector of agent's index
+        ind = np.zeros((batch_size, self.na))
+        ind[:,index] = 1.
+        obs_batch_i = np.concatenate((obs_batch_i, ind), axis=1)
+        next_obs_batch_i = mp.concatenate((next_obs_batch_i, ind), axis=1)
         # Reshape
         obs_batch = np.reshape(obs_batch, (batch_size, -1))
         action_batch = np.reshape(action_batch, (batch_size, -1))

@@ -30,8 +30,8 @@ class AgentTrainer(object):
         self.critic_optim = Adam(self.critic.parameters(), lr=args.critic_lr)
         hard_update(self.critic_target, self.critic)
 
-        self.policy = GaussianPolicy(obs_shape_list[self.index], action_shape_list[self.index], args.hidden_dim).to(device=self.device)
-        self.policy_target = GaussianPolicy(obs_shape_list[self.index], action_shape_list[self.index], args.hidden_dim).to(device=self.device)
+        self.policy = GaussianPolicy(obs_shape_list[0], action_shape_list[0], args.hidden_dim).to(device=self.device)
+        self.policy_target = GaussianPolicy(obs_shape_list[0], action_shape_list[0], args.hidden_dim).to(device=self.device)
         self.policy_optim = Adam(self.policy.parameters(), lr=args.policy_lr)
         hard_update(self.policy_target, self.policy)
 
@@ -52,15 +52,15 @@ class AgentTrainer(object):
         action_batch_i = action_batch[:,index]
         reward_batch_i = reward_batch[:,index]
         next_obs_batch_i = next_obs_batch[:,index]
-        # Add one-hot vector of agent's index
-        ind = np.zeros((batch_size, self.na))
-        ind[:,index] = 1.
-        obs_batch_i = np.concatenate((obs_batch_i, ind), axis=1)
-        next_obs_batch_i = mp.concatenate((next_obs_batch_i, ind), axis=1)
         # Reshape
         obs_batch = np.reshape(obs_batch, (batch_size, -1))
         action_batch = np.reshape(action_batch, (batch_size, -1))
         next_obs_batch = np.reshape(next_obs_batch, (batch_size, -1))
+        # Add one-hot vector of agent's index
+        ind = np.zeros((batch_size, self.na))
+        ind[:,index] = 1.
+        obs_batch = np.concatenate((obs_batch, ind), axis=1)
+        next_obs_batch = np.concatenate((next_obs_batch, ind), axis=1)
         # Move to the device designated
         obs_batch = torch.FloatTensor(obs_batch).to(self.device)
         action_batch = torch.FloatTensor(action_batch).to(self.device)
@@ -75,7 +75,7 @@ class AgentTrainer(object):
 
         with torch.no_grad():
             next_action, next_log_p, _ = self.policy_target.sample(next_obs_batch_i)
-            next_actions[:,self.index] = next_action
+            next_actions[:,index] = next_action
             next_actions = torch.reshape(next_actions, (batch_size, -1))
             next_q = self.critic_target(next_obs_batch, next_actions) - self.alpha * next_log_p
             td_q = reward_batch_i + self.gamma * next_q
@@ -84,7 +84,7 @@ class AgentTrainer(object):
         q_loss = F.mse_loss(q, td_q)
 
         a, log_p, _ = self.policy.sample(obs_batch_i)
-        all_a[:,self.index] = a
+        all_a[:,index] = a
         all_a = torch.reshape(all_a, (batch_size, -1))
         q_p = self.critic(obs_batch, all_a)
         policy_loss = (self.alpha * log_p - q_p).mean()
@@ -104,31 +104,31 @@ class AgentTrainer(object):
         return q_loss, policy_loss
 
     # Save model parameters
-    def save_model(self, env_name, suffix="", actor_path=None, critic_path=None):
+    def save_model(self, index, env_name, suffix="", actor_path=None, critic_path=None):
         if not os.path.exists('models/'):
             os.makedirs('models/')
 
         if actor_path is None:
-            actor_path = "models/maddpg_actor_{}_{}_{}".format(env_name, suffix, self.index)
+            actor_path = "models/maddpg_actor_{}_{}_{}".format(env_name, suffix, index)
         if critic_path is None:
-            critic_path = "models/maddpg_critic_{}_{}_{}".format(env_name, suffix, self.index)
+            critic_path = "models/maddpg_critic_{}_{}_{}".format(env_name, suffix, index)
 
         print('Saving models to {} and {}'.format(actor_path, critic_path))
         torch.save(self.policy.state_dict(), actor_path)
         torch.save(self.critic.state_dict(), critic_path)        
     
     # Load model parameters
-    def load_model(self, actor_path=None, critic_path=None, env_name=None, suffix=""):
+    def load_model(self, index, actor_path=None, critic_path=None, env_name=None, suffix=""):
         print('Loading models from {} and {}'.format(actor_path, critic_path))
         if actor_path is not None:
             self.policy.load_state_dict(torch.load(actor_path))
         elif env_name is not None:
-            actor_path = "models/maddpg_actor_{}_{}_{}".format(env_name, suffix, self.index)
+            actor_path = "models/maddpg_actor_{}_{}_{}".format(env_name, suffix, index)
             self.policy.load_state_dict(torch.load(actor_path))
         if critic_path is not None:
             self.critic.load_state_dict(torch.load(critic_path))
         elif env_name is not None:
-            critic_path = "models/maddpg_critic_{}_{}_{}".format(env_name, suffix,self.index)
+            critic_path = "models/maddpg_critic_{}_{}_{}".format(env_name, suffix, index)
             self.critic.load_state_dict(torch.load(critic_path))
 
         hard_update(self.critic_target, self.critic)

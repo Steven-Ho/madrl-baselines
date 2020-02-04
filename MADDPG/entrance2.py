@@ -8,7 +8,7 @@ import itertools
 from copy import deepcopy
 from tensorboardX import SummaryWriter
 from buffer import ReplayMemory
-from train2 import AgentTrainer
+from train3 import AgentTrainer
 from multiagent.environment import MultiAgentEnv
 import multiagent.scenarios as scenarios
 
@@ -118,8 +118,5 @@ for i_episode in itertools.count(1):
 
     if i_episode > args.num_episodes:
         break
-
-for t in trainers:
-    t.save_model(args.scenario)
 
 env.close()
